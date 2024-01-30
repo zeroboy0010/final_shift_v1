@@ -6,6 +6,8 @@
 #include <EEPROM.h>
 #include <addons/TokenHelper.h>
 #include <ShiftRegister74HC595.h>
+#include "esp_heap_caps.h"
+
 //
 /* 1. Define the WiFi credentials */
 String Input;
@@ -109,11 +111,13 @@ void extract_digit(int N)
         N = N / 10; 
     } 
 } 
+
+xTaskHandle taskHandle_delete;
   
 
 void setup() {
   Serial.begin(9600);
-/////////////////////////////////
+  /////////////////////////////////
   EEPROM.begin(150);
   pinMode(Input_Button,INPUT_PULLUP);
 
@@ -181,7 +185,7 @@ void setup() {
     xTaskCreatePinnedToCore(
     Task_Data
     ,  "Task_Data" // A name just for humans
-    ,  2048 * 13      // The stack size can be checked by calling `uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);`
+    ,  2048 * 10      // The stack size can be checked by calling `uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);`
     ,  NULL // Task parameter which can modify the task behavior. This must be passed as pointer to void.
     ,  3  // Priority
     ,  NULL
@@ -190,7 +194,7 @@ void setup() {
   xTaskCreatePinnedToCore(
     TaskMotor
     ,  "TaskMotor" // A name just for humans
-    ,  2048 * 10       // The stack size can be checked by calling `uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);`
+    ,  2048 * 4       // The stack size can be checked by calling `uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);`
     ,  NULL // Task parameter which can modify the task behavior. This must be passed as pointer to void.
     ,  5  // Priority
     ,  NULL
@@ -199,10 +203,10 @@ void setup() {
   xTaskCreatePinnedToCore(
     TaskHalSensor
     ,  "TaskHalSensor" // A name just for humans
-    ,  2048 * 4       // The stack size can be checked by calling `uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);`
+    ,  2048 * 3       // The stack size can be checked by calling `uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);`
     ,  NULL // Task parameter which can modify the task behavior. This must be passed as pointer to void.
     ,  4  // Priority
-    ,  NULL
+    ,  &taskHandle_delete
     , 1 // Task handle is not used here - simply pass NULL
     );
   }
@@ -392,16 +396,22 @@ void TaskMotor(void *pvParameters)
   Serial.println("  runnnn !!!!");
   for (;;)
   { 
+    if(stepper1_finish_homing && stepper2_finish_homing && stepper3_finish_homing && stepper4_finish_homing
+      && stepper5_finish_homing && stepper6_finish_homing && stepper7_finish_homing){
+      vTaskDelete(taskHandle_delete);
+    }
 
-    if (xQueueReceive(like_num,&like_num_,5) == pdTRUE){
+    if (xQueueReceive(like_num,&like_num_,2) == pdTRUE){
+      Serial.print("Queue recieve!!");
+      Serial.println(like_num_);
       extract_digit(like_num_);
-      stepper7_new_number  = (int) arr[0]; //3
-      stepper6_new_number  = (int) arr[1]; //3
-      stepper5_new_number  = (int) arr[2]; //3
-      stepper4_new_number  = (int) arr[3]; //3
-      stepper3_new_number  = (int) arr[4]; //3
-      stepper2_new_number  = (int) arr[5]; //3
-      stepper1_new_number  = (int) arr[6]; //3
+      // stepper7_new_number  = (int) arr[0]; //3
+      // stepper6_new_number  = (int) arr[1]; //3
+      // stepper5_new_number  = (int) arr[2]; //3
+      // stepper4_new_number  = (int) arr[3]; //3
+      // stepper3_new_number  = (int) arr[4]; //3
+      // stepper2_new_number  = (int) arr[5]; //3
+      // stepper1_new_number  = (int) arr[6]; //3
     };
 
     if(stepper1_finish_homing == 0){
@@ -731,7 +741,7 @@ void TaskMotor(void *pvParameters)
   }
 
   sr.updateRegisters();
-  // vTaskDelay(1);
+  // vTaskDelay(pdMS_TO_TICKS(1000));
   }
   vTaskDelete(NULL);
 }
@@ -756,7 +766,7 @@ void Task_Data  ( void *pvParameters ){
   vTaskDelay(pdMS_TO_TICKS(5000));
   // DynamicJsonDocument doc(2048);
   for(;;){
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    
     // Firebase.ready() should be called repeatedly to handle authentication tasks.
     if (Firebase.ready() && Wifi_status == true)
     {
@@ -795,7 +805,7 @@ void Task_Data  ( void *pvParameters ){
         // If the document path contains space e.g. "a b c/d e f"
         // It should encode the space as %20 then the path will be "a%20b%20c/d%20e%20f"
 
-        Serial.print("Get a document... ");
+        Serial.println("Get a document... ");
 
         if (Firebase.Firestore.getDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath.c_str(), mask.c_str())){
             
@@ -816,9 +826,14 @@ void Task_Data  ( void *pvParameters ){
 
         }
         else
-            
             Serial.println(fbdo.errorReason());
     }
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    // test
+    size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+    Serial.print("Free heap: ");
+    Serial.println(freeHeap);
+    vTaskDelay(pdMS_TO_TICKS(500));
   }
   vTaskDelete(NULL);
 }

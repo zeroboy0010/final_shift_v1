@@ -81,6 +81,7 @@ void ShiftRegister74HC595<Size>::updateRegisters()
     }
     
     digitalWrite(_latchPin, HIGH); 
+    delayMicroseconds(20);
     digitalWrite(_latchPin, LOW); 
 }
 
